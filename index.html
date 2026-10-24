@@ -2,55 +2,108 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MovieNote</title>
 <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
 <link rel="icon" href="favicon-16.png" sizes="16x16" type="image/png">
 <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<meta name="theme-color" content="#1c1c1e">
+<meta name="theme-color" content="#16161a">
 <style>
+  /* Same palette as the app: dark by default, ivory in the light theme. */
   :root {
-    --bg: #1c1c1e; --card: #2c2c2e; --fill: #3a3a3c; --accent: #0a84ff;
-    --text: #ffffff; --secondary: #ebebf5; --tertiary: #8e8e93;
+    --bg: #16161a; --bar: rgba(22,22,26,.82); --card: #24242a; --fill: #33333a; --line: rgba(255,255,255,.08);
+    --text: #ffffff; --secondary: #dcdce4; --tertiary: #8e8e98; --accent: #f0a640; --accent-text: #1a1206;
+    --shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+  :root[data-theme="light"] {
+    --bg: #fffff0; --bar: rgba(255,255,240,.86); --card: #ffffff; --fill: #efe8d5; --line: rgba(60,50,20,.10);
+    --text: #1c1c1e; --secondary: #3c3a33; --tertiary: #8b877c; --accent: #b86e0c; --accent-text: #ffffff;
+    --shadow: 0 8px 24px rgba(80,60,20,.10);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 16px 14px 60px; }
-  header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-  h1 { font-size: 22px; letter-spacing: -0.3px; }
-  .spacer { flex: 1; }
-  button { background: var(--fill); color: var(--secondary); border: 0; border-radius: 14px; padding: 9px 14px; font-size: 14px; font-weight: 600; cursor: pointer; }
-  button.primary { background: var(--accent); color: #fff; }
-  #status { width: 100%; color: var(--tertiary); font-size: 13px; }
-  h2 { font-size: 20px; margin: 22px 0 4px; display: flex; align-items: baseline; gap: 8px; }
-  h2 .count { color: var(--tertiary); font-size: 14px; font-weight: 400; }
-  .empty { color: var(--tertiary); font-size: 14px; margin: 6px 0 10px; }
-  .card { background: var(--card); border-radius: 12px; padding: 10px; margin: 10px 0; display: flex; gap: 10px; }
-  .card.minimized { padding: 7px 10px; }
-  .poster { width: 92px; min-width: 92px; aspect-ratio: 2/3; object-fit: cover; border-radius: 8px; background: var(--fill); }
-  .minimized .poster { width: 22px; min-width: 22px; height: 32px; border-radius: 4px; }
-  .info { flex: 1; min-width: 0; }
-  .title { font-weight: 700; font-size: 16px; }
-  .meta { color: var(--tertiary); font-size: 13px; font-weight: 600; margin-top: 3px; }
-  .meta a { color: var(--accent); text-decoration: none; }
-  .desc { color: var(--secondary); font-size: 14px; margin-top: 6px; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.5 -apple-system, 'Segoe UI', Roboto, sans-serif; min-height: 100vh; }
+  button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
+
+  /* ---- top bar + menu ---- */
+  .bar { position: sticky; top: 0; z-index: 10; background: var(--bar); backdrop-filter: saturate(160%) blur(18px); -webkit-backdrop-filter: saturate(160%) blur(18px); border-bottom: 1px solid var(--line); }
+  .bar-inner { max-width: 1080px; margin: 0 auto; padding: 12px 16px 0; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand img { width: 34px; height: 34px; border-radius: 9px; }
+  .brand h1 { font-size: 20px; letter-spacing: -.3px; }
+  .brand .spacer { flex: 1; }
+  .icon-btn { width: 38px; height: 38px; border-radius: 12px; background: var(--fill); display: grid; place-items: center; color: var(--secondary); }
+  .icon-btn svg { width: 19px; height: 19px; }
+  .search { margin-top: 10px; position: relative; }
+  .search input { width: 100%; height: 40px; border-radius: 12px; border: 0; outline: 0; background: var(--fill); color: var(--text); font: inherit; padding: 0 14px 0 38px; }
+  .search input::placeholder { color: var(--tertiary); }
+  .search svg { position: absolute; left: 12px; top: 11px; width: 18px; height: 18px; color: var(--tertiary); }
+  .tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 10px 0 12px; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: none; height: 34px; padding: 0 14px; border-radius: 17px; background: var(--fill); color: var(--secondary); font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 7px; white-space: nowrap; transition: background .15s, color .15s; }
+  .tab .n { font-size: 12px; color: var(--tertiary); font-weight: 700; }
+  .tab.on { background: var(--text); color: var(--bg); }
+  .tab.on .n { color: var(--bg); opacity: .6; }
+
+  /* ---- list ---- */
+  main { max-width: 1080px; margin: 0 auto; padding: 16px 16px 60px; }
+  .status { color: var(--tertiary); font-size: 13px; margin: 0 2px 12px; }
+  .group-title { font-size: 22px; font-weight: 800; letter-spacing: -.3px; margin: 22px 2px 10px; display: flex; align-items: baseline; gap: 8px; }
+  .group-title:first-of-type { margin-top: 4px; }
+  .group-title .n { color: var(--tertiary); font-size: 15px; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  @media (min-width: 820px) { .grid { grid-template-columns: 1fr 1fr; gap: 16px; } }
+
+  .card { background: var(--card); border-radius: 16px; overflow: hidden; display: flex; box-shadow: var(--shadow); min-height: 180px; }
+  .poster { flex: none; width: 128px; background: var(--fill) center/cover no-repeat; position: relative; }
+  @media (min-width: 520px) { .poster { width: 150px; } .card { min-height: 225px; } }
+  .poster.none { display: grid; place-items: center; color: var(--tertiary); font-size: 34px; }
+  .body { flex: 1; min-width: 0; padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 5px; }
+  .title { font-size: 17px; font-weight: 700; line-height: 1.25; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .chip { font-size: 12px; font-weight: 700; color: var(--secondary); background: var(--fill); border-radius: 8px; padding: 2px 8px; }
+  .chip.rating { background: var(--accent); color: var(--accent-text); }
+  .desc { color: var(--secondary); font-size: 14px; line-height: 1.45; }
   .desc.clamp { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
-  .setup, .error { background: var(--card); border-radius: 12px; padding: 18px; margin: 20px 0; color: var(--secondary); font-size: 14px; }
-  .setup b { color: var(--text); }
-  .setup ol { margin: 10px 0 0 18px; }
-  .setup li { margin: 6px 0; }
-  footer { color: var(--tertiary); font-size: 12px; margin-top: 30px; text-align: center; }
+  .links { margin-top: auto; padding-top: 6px; display: flex; gap: 8px; }
+  .links a { font-size: 13px; font-weight: 700; color: var(--accent); text-decoration: none; }
+
+  .card.mini { min-height: 0; }
+  .card.mini .poster { width: 44px; }
+  .card.mini .body { padding: 10px 12px; }
+  .card.mini .title { font-size: 15px; }
+
+  .note { background: var(--card); border-radius: 16px; padding: 22px; color: var(--secondary); box-shadow: var(--shadow); max-width: 620px; margin: 24px auto; }
+  .note b { color: var(--text); font-size: 17px; display: block; margin-bottom: 8px; }
+  .note ol { margin: 10px 0 10px 20px; } .note li { margin: 6px 0; }
+  .empty { color: var(--tertiary); text-align: center; padding: 40px 0; }
+  footer { color: var(--tertiary); font-size: 12px; text-align: center; padding: 0 16px 30px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>MovieNote</h1>
-  <span class="spacer"></span>
-  <button id="refresh" class="primary" hidden>Обновить</button>
-  <div id="status"></div>
-</header>
+<div class="bar">
+  <div class="bar-inner">
+    <div class="brand">
+      <img src="icon-192.png" alt="">
+      <h1>MovieNote</h1>
+      <span class="spacer"></span>
+      <button class="icon-btn" id="refresh" title="Обновить" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+      </button>
+      <button class="icon-btn" id="theme" title="Тема">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
+      </button>
+    </div>
+    <div class="search" id="searchBox" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="search" type="search" placeholder="Поиск по названию или описанию" autocomplete="off">
+    </div>
+    <nav class="tabs" id="tabs" hidden></nav>
+  </div>
+</div>
 <main id="content"></main>
-<footer>MovieNote Web · список открывается по ссылке из приложения · без входа</footer>
+<footer>MovieNote · ссылка из приложения открывает список без входа</footer>
 
 <script>
 // Browser API key of the movienote Google Cloud project (restricted to this
@@ -58,100 +111,156 @@
 const API_KEY = '';
 const params = new URLSearchParams(location.search);
 const FILE_ID = params.get('file');
+const DEMO = params.has('demo');
 
+const SECTIONS = [
+  { key: 'Watchlist', name: 'Хочу' , title: 'Хочу посмотреть' },
+  { key: 'Liked', name: 'Понравилось', title: 'Понравилось' },
+  { key: 'Watched', name: 'Смотрел', title: 'Посмотрел' },
+  { key: 'Rewatch', name: 'Пересмотреть', title: 'Пересмотреть' },
+  { key: 'Child', name: 'Ребенок', title: 'Ребенок' }
+];
+
+let movies = [];
+let active = localStorageGet('mn-tab') || 'all';
+let query = '';
+
+function localStorageGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function localStorageSet(k, v) { try { localStorage.setItem(k, v); } catch { } }
 function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+const $ = id => document.getElementById(id);
 
+// ---- theme: follows the system until the visitor picks one ----
+function applyTheme() {
+  const saved = localStorageGet('mn-theme');
+  const light = saved ? saved === 'light' : matchMedia('(prefers-color-scheme: light)').matches;
+  document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  document.querySelector('meta[name=theme-color]').content = light ? '#fffff0' : '#16161a';
+}
+$('theme').addEventListener('click', () => {
+  localStorageSet('mn-theme', document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+  applyTheme();
+});
+applyTheme();
+
+// ---- loading ----
 function showWelcome() {
-  document.getElementById('content').replaceChildren(el(`
-    <div class="setup">
-      <b>Просмотр списка фильмов и сериалов</b>
+  $('content').replaceChildren(el(`
+    <div class="note">
+      <b>Список фильмов и сериалов</b>
       <ol>
-        <li>Откройте приложение MovieNote на телефоне.</li>
-        <li>Нажмите «Синхр.» — после синхронизации приложение покажет <b>ссылку</b> на эту страницу.</li>
-        <li>Скопируйте ссылку и откройте её здесь — или добавьте в закладки.</li>
+        <li>Откройте MovieNote на телефоне.</li>
+        <li>Меню «⋮» → <i>Ссылка для браузера</i>.</li>
+        <li>Скопируйте или отправьте ссылку и откройте её здесь.</li>
       </ol>
-      Ссылка открывается на любом устройстве, вход не нужен.
+      Ссылка работает на любом устройстве, вход не нужен.
     </div>`));
-  status('Откройте ссылку из приложения, чтобы посмотреть список.');
+}
+
+function renderMessage(title, hint) {
+  $('content').replaceChildren(el(`<div class="note"><b>${esc(title)}</b>${esc(hint || '')}</div>`));
 }
 
 async function loadLibrary() {
+  if (DEMO) { movies = demoData(); renderAll('Демонстрационный список'); return; }
   if (!API_KEY) {
-    renderMessage('Страница почти готова', 'Завершается настройка просмотра — попробуйте открыть ссылку чуть позже.');
+    renderMessage('Просмотр пока не настроен', 'Не задан ключ доступа к Google Drive для этой страницы.');
     return;
   }
   try {
-    status('Загружаю…');
+    $('content').replaceChildren(el('<div class="empty">Загружаю…</div>'));
     const resp = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(FILE_ID)}?alt=media&key=${API_KEY}`);
     if (resp.status === 403 || resp.status === 404) {
-      renderMessage('Нет доступа к файлу', 'Попросите владельца списка открыть приложение и нажать «Синхр.» — доступ обновится автоматически.');
+      renderMessage('Нет доступа к списку', 'Откройте приложение и снова получите ссылку в меню «⋮» — доступ обновится.');
       return;
     }
     if (!resp.ok) throw new Error('Drive API ' + resp.status);
-    const movies = JSON.parse(await resp.text());
-    render(movies);
-    status('Обновлено · ' + new Date().toLocaleString('ru-RU'));
+    const data = JSON.parse(await resp.text());
+    movies = Array.isArray(data) ? data : (data.movies || []);
+    renderAll('Обновлено ' + new Date().toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }));
   } catch (e) {
     renderMessage('Не удалось загрузить список', e.message);
   }
 }
 
-const SECTIONS = [
-  { key: 'Watchlist', name: 'Хочу посмотреть' },
-  { key: 'Liked', name: 'Понравилось' },
-  { key: 'Watched', name: 'Посмотрел' }
-];
+// ---- rendering ----
+const statusOf = m => m.status || 'Watchlist';
 
-function render(movies) {
-  const main = document.getElementById('content');
-  main.replaceChildren();
-  for (const section of SECTIONS) {
-    const items = movies.filter(m => (m.status || 'Watchlist') === section.key);
-    main.append(el(`<h2>${esc(section.name)}<span class="count">${items.length}</span></h2>`));
-    if (!items.length) { main.append(el('<div class="empty">Пока пусто</div>')); continue; }
-    for (const m of items) main.append(card(m));
+function matches(m) {
+  if (!query) return true;
+  return ((m.title || '') + ' ' + (m.description || '')).toLowerCase().includes(query);
+}
+
+function renderTabs() {
+  const visible = movies.filter(matches);
+  const tabs = [{ key: 'all', name: 'Все', n: visible.length }]
+    .concat(SECTIONS.map(s => ({ key: s.key, name: s.name, n: visible.filter(m => statusOf(m) === s.key).length }))
+      .filter(s => s.n > 0 || s.key === active || movies.some(m => statusOf(m) === s.key)));
+  if (!tabs.some(t => t.key === active)) active = 'all';
+  $('tabs').replaceChildren(...tabs.map(t => {
+    const b = el(`<button class="tab${t.key === active ? ' on' : ''}">${esc(t.name)}<span class="n">${t.n}</span></button>`);
+    b.addEventListener('click', () => { active = t.key; localStorageSet('mn-tab', active); renderAll(); scrollTo({ top: 0 }); });
+    return b;
+  }));
+}
+
+let statusText = '';
+function renderAll(newStatus) {
+  if (newStatus) statusText = newStatus;
+  $('tabs').hidden = $('searchBox').hidden = $('refresh').hidden = false;
+  if (DEMO) $('refresh').hidden = true;
+  renderTabs();
+  const main = $('content');
+  main.replaceChildren(el(`<div class="status">${esc(statusText)}</div>`));
+  const sections = active === 'all' ? SECTIONS : SECTIONS.filter(s => s.key === active);
+  let shown = 0;
+  for (const s of sections) {
+    const items = movies.filter(m => statusOf(m) === s.key && matches(m));
+    if (!items.length) continue;
+    shown += items.length;
+    main.append(el(`<h2 class="group-title">${esc(s.title)}<span class="n">${items.length}</span></h2>`));
+    const grid = el('<div class="grid"></div>');
+    items.forEach(m => grid.append(card(m)));
+    main.append(grid);
   }
+  if (!shown) main.append(el(`<div class="empty">${query ? 'Ничего не найдено' : 'Здесь пока пусто'}</div>`));
 }
 
 function card(m) {
-  const meta = [
-    m.rating != null ? '★ ' + Number(m.rating).toFixed(1) : 'без рейтинга',
-    esc(m.source || ''), m.kind ? esc(m.kind) : ''
-  ].filter(Boolean).join(' · ');
-  const title = esc(m.title || '') + (m.year ? ` <span style="color:var(--tertiary);font-weight:400">(${esc(m.year)})</span>` : '');
-  if (m.minimized) {
-    return el(`<div class="card minimized"><img class="poster" src="${esc(m.posterUrl || '')}" alt="" onerror="this.style.visibility='hidden'">
-      <div class="info"><div class="title" style="font-size:14px">${title}</div></div></div>`);
-  }
-  const link = m.link ? `<a href="${esc(m.link)}" target="_blank" rel="noopener">IMDb ↗</a>` : '';
-  const desc = m.description || '';
-  const node = el(`<div class="card">
-    <img class="poster" src="${esc(m.posterUrl || '')}" alt="" onerror="this.style.visibility='hidden'">
-    <div class="info">
-      <div class="title">${title}</div>
-      <div class="meta">${meta}${link ? ' · ' + link : ''}</div>
-      ${desc ? `<div class="desc clamp">${esc(desc)}</div>` : ''}
-    </div></div>`);
+  const chips = [];
+  if (m.rating != null) chips.push(`<span class="chip rating">★ ${Number(m.rating).toFixed(1)}</span>`);
+  if (m.year) chips.push(`<span class="chip">${esc(m.year)}</span>`);
+  if (m.kind) chips.push(`<span class="chip">${esc(m.kind)}</span>`);
+  const poster = m.posterUrl
+    ? `<div class="poster" style="background-image:url('${esc(m.posterUrl)}')"></div>`
+    : `<div class="poster none">🎬</div>`;
+  const link = m.link ? `<a href="${esc(m.link)}" target="_blank" rel="noopener">${esc(m.source || 'Ссылка')} ↗</a>` : '';
+  const node = el(`<article class="card${m.minimized ? ' mini' : ''}">
+    ${poster}
+    <div class="body">
+      <div class="title">${esc(m.title || 'Без названия')}</div>
+      ${chips.length ? `<div class="meta">${chips.join('')}</div>` : ''}
+      ${!m.minimized && m.description ? `<div class="desc clamp">${esc(m.description)}</div>` : ''}
+      ${!m.minimized && link ? `<div class="links">${link}</div>` : ''}
+    </div></article>`);
   const d = node.querySelector('.desc');
   if (d) d.addEventListener('click', () => d.classList.toggle('clamp'));
   return node;
 }
 
-function renderMessage(title, hint) {
-  document.getElementById('content').replaceChildren(el(
-    `<div class="error"><b>${esc(title)}</b><br><br>${esc(hint || '')}</div>`));
+$('search').addEventListener('input', e => { query = e.target.value.trim().toLowerCase(); renderAll(); });
+$('refresh').addEventListener('click', loadLibrary);
+
+function demoData() {
+  return [
+    { title: 'Ла-Ла Ленд', year: 2016, kind: 'фильм', rating: 8.0, status: 'Watchlist', source: 'IMDb', link: 'https://www.imdb.com/title/tt3783958/', posterUrl: 'https://image.tmdb.org/t/p/w342/uDO8zWDhfWwoFdKS4fzkUJt0Rf0.jpg', description: 'Миа — начинающая актриса, Себастьян — джазовый музыкант. Они встречаются в Лос-Анджелесе и пытаются совместить любовь и мечты о карьере.' },
+    { title: 'Прибытие', year: 2016, kind: 'фильм', rating: 7.9, status: 'Liked', source: 'IMDb', link: 'https://www.imdb.com/title/tt2543164/', posterUrl: 'https://image.tmdb.org/t/p/w342/x2FJsf1ElAgr63Y3PNPtJrcmpoe.jpg', description: 'Лингвист Луиза Бэнкс пытается найти общий язык с пришельцами, чьи корабли зависли над Землёй.' },
+    { title: 'Разделение', year: 2022, kind: 'сериал', rating: 8.7, status: 'Watched', source: 'IMDb', link: 'https://www.imdb.com/title/tt11280740/', posterUrl: 'https://image.tmdb.org/t/p/w342/lFf6LLrQjYldcZItzOkGmMMigP7.jpg', description: 'Сотрудники корпорации «Люмон» проходят процедуру, разделяющую их память на рабочую и личную.' }
+  ];
 }
 
-function status(text) { document.getElementById('status').textContent = text; }
-
-document.getElementById('refresh').addEventListener('click', loadLibrary);
-if (FILE_ID) {
-  document.getElementById('refresh').hidden = false;
-  loadLibrary();
-} else {
-  showWelcome();
-}
+if (FILE_ID || DEMO) loadLibrary(); else showWelcome();
 </script>
 </body>
 </html>
