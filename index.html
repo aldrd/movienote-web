@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MovieNote</title>
+<style>
+  :root {
+    --bg: #1c1c1e; --card: #2c2c2e; --fill: #3a3a3c; --accent: #0a84ff;
+    --text: #ffffff; --secondary: #ebebf5; --tertiary: #8e8e93;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 16px 14px 60px; }
+  header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  h1 { font-size: 22px; letter-spacing: -0.3px; }
+  .spacer { flex: 1; }
+  button { background: var(--fill); color: var(--secondary); border: 0; border-radius: 14px; padding: 9px 14px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; }
+  #status { width: 100%; color: var(--tertiary); font-size: 13px; }
+  h2 { font-size: 20px; margin: 22px 0 4px; display: flex; align-items: baseline; gap: 8px; }
+  h2 .count { color: var(--tertiary); font-size: 14px; font-weight: 400; }
+  .empty { color: var(--tertiary); font-size: 14px; margin: 6px 0 10px; }
+  .card { background: var(--card); border-radius: 12px; padding: 10px; margin: 10px 0; display: flex; gap: 10px; }
+  .card.minimized { padding: 7px 10px; }
+  .poster { width: 92px; min-width: 92px; aspect-ratio: 2/3; object-fit: cover; border-radius: 8px; background: var(--fill); }
+  .minimized .poster { width: 22px; min-width: 22px; height: 32px; border-radius: 4px; }
+  .info { flex: 1; min-width: 0; }
+  .title { font-weight: 700; font-size: 16px; }
+  .meta { color: var(--tertiary); font-size: 13px; font-weight: 600; margin-top: 3px; }
+  .meta a { color: var(--accent); text-decoration: none; }
+  .desc { color: var(--secondary); font-size: 14px; margin-top: 6px; }
+  .desc.clamp { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+  .setup, .error { background: var(--card); border-radius: 12px; padding: 18px; margin: 20px 0; color: var(--secondary); font-size: 14px; }
+  .setup input { width: 100%; background: var(--bg); border: 1px solid var(--fill); border-radius: 10px; color: var(--text); padding: 10px 12px; font-size: 14px; margin: 10px 0; }
+  .setup code, .error code { background: var(--fill); border-radius: 6px; padding: 1px 6px; font-size: 13px; word-break: break-all; }
+  .setup ol { margin: 10px 0 0 18px; }
+  .setup li { margin: 6px 0; }
+  footer { color: var(--tertiary); font-size: 12px; margin-top: 30px; text-align: center; }
+</style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+<header>
+  <h1>MovieNote</h1>
+  <span class="spacer"></span>
+  <button id="refresh" class="primary" hidden>Обновить</button>
+  <button id="login">Войти через Google</button>
+  <div id="status">Чтение библиотеки из Google Drive — только в вашем браузере.</div>
+</header>
+<main id="content"></main>
+<footer>MovieNote Web · файл movienote-library.json из вашего Google Drive · страница работает локально в браузере</footer>
+
+<script>
+const FILE_NAME = 'movienote-library.json';
+const SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+const params = new URLSearchParams(location.search);
+let accessToken = null;
+let fileId = null;
+
+function clientId() {
+  const fromQuery = params.get('client');
+  if (fromQuery) { localStorage.setItem('mn_client_id', fromQuery); }
+  return localStorage.getItem('mn_client_id');
+}
+
+function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; }
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function showSetup() {
+  document.getElementById('content').replaceChildren(el(`
+    <div class="setup">
+      <b>Настройка (один раз)</b>
+      <ol>
+        <li>Откройте <a style="color:var(--accent)" href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console → Credentials</a> (проект movienote).</li>
+        <li>Создайте <b>OAuth client ID → Web application</b>.</li>
+        <li>Authorized JavaScript origins: <code>${location.origin}</code></li>
+        <li>Скопируйте Client ID (…apps.googleusercontent.com) и вставьте ниже — он сохранится в этом браузере:</li>
+      </ol>
+      <input id="cid" placeholder="xxxx.apps.googleusercontent.com">
+      <button class="primary" onclick="saveCid()">Сохранить и войти</button>
+    </div>`));
+  document.getElementById('login').hidden = true;
+}
+
+window.saveCid = function () {
+  const v = document.getElementById('cid').value.trim();
+  if (!v.includes('apps.googleusercontent.com')) { alert('Похоже, это не Client ID'); return; }
+  localStorage.setItem('mn_client_id', v);
+  login();
+};
+
+function login() {
+  if (!clientId()) { showSetup(); return; }
+  if (!window.google?.accounts?.oauth2) { setTimeout(login, 200); return; }
+  const tc = google.accounts.oauth2.initTokenClient({
+    client_id: clientId(),
+    scope: SCOPE,
+    callback: (resp) => {
+      if (resp.error) { status('Вход не выполнен: ' + resp.error); return; }
+      accessToken = resp.access_token;
+      document.getElementById('login').hidden = true;
+      document.getElementById('refresh').hidden = false;
+      loadLibrary();
+    }
+  });
+  tc.requestAccessToken({ prompt: '' });
+}
+
+async function api(url, options) {
+  const resp = await fetch(url, { ...options, headers: { Authorization: 'Bearer ' + accessToken, ...(options?.headers || {}) } });
+  if (resp.status === 401) { accessToken = null; throw new Error('Требуется повторный вход'); }
+  if (!resp.ok) throw new Error('Drive API ' + resp.status);
+  return resp;
+}
+
+async function loadLibrary() {
+  try {
+    status('Ищу файл библиотеки…');
+    const list = await (await api(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent("name = '" + FILE_NAME + "' and trashed = false")}&fields=${encodeURIComponent('files(id,modifiedTime)')}&spaces=drive&pageSize=5`)).json();
+    const files = (list.files || []).sort((a, b) => (b.modifiedTime || '').localeCompare(a.modifiedTime || ''));
+    if (!files.length) {
+      renderMessage('Файл ' + FILE_NAME + ' не найден на Google Drive.',
+        'Откройте приложение на телефоне и нажмите «Синхр.» — файл будет создан при первом сохранении.');
+      return;
+    }
+    fileId = files[0].id;
+    status('Загружаю…');
+    const text = await (await api(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`)).text();
+    const movies = JSON.parse(text);
+    render(movies);
+    status('Синхронизировано · ' + new Date(files[0].modifiedTime).toLocaleString('ru-RU'));
+  } catch (e) {
+    if (accessToken === null) { login(); return; }
+    renderMessage('Не удалось загрузить библиотеку', e.message + '. Проверьте, что вы — тест-пользователь OAuth-клиента (консоль Google Cloud → OAuth consent screen → Test users) и вошли тем же аккаунтом, где лежит файл.');
+    status('');
+  }
+}
+
+const SECTIONS = [
+  { key: 'Watchlist', name: 'Хочу посмотреть' },
+  { key: 'Liked', name: 'Понравилось' },
+  { key: 'Watched', name: 'Посмотрел' }
+];
+
+function render(movies) {
+  const main = document.getElementById('content');
+  main.replaceChildren();
+  for (const section of SECTIONS) {
+    const items = movies.filter(m => (m.status || 'Watchlist') === section.key);
+    main.append(el(`<h2>${esc(section.name)}<span class="count">${items.length}</span></h2>`));
+    if (!items.length) { main.append(el('<div class="empty">Пока пусто</div>')); continue; }
+    for (const m of items) main.append(card(m));
+  }
+}
+
+function card(m) {
+  const meta = [
+    m.rating != null ? '★ ' + Number(m.rating).toFixed(1) : 'без рейтинга',
+    esc(m.source || ''), m.kind ? esc(m.kind) : ''
+  ].filter(Boolean).join(' · ');
+  const title = esc(m.title || '') + (m.year ? ` <span style="color:var(--tertiary);font-weight:400">(${esc(m.year)})</span>` : '');
+  if (m.minimized) {
+    return el(`<div class="card minimized"><img class="poster" src="${esc(m.posterUrl || '')}" alt="" onerror="this.style.visibility='hidden'">
+      <div class="info"><div class="title" style="font-size:14px">${title}</div></div></div>`);
+  }
+  const link = m.link ? `<a href="${esc(m.link)}" target="_blank" rel="noopener">IMDb ↗</a>` : '';
+  const desc = m.description || '';
+  const node = el(`<div class="card">
+    <img class="poster" src="${esc(m.posterUrl || '')}" alt="" onerror="this.style.visibility='hidden'">
+    <div class="info">
+      <div class="title">${title}</div>
+      <div class="meta">${meta}${link ? ' · ' + link : ''}</div>
+      ${desc ? `<div class="desc clamp">${esc(desc)}</div>` : ''}
+    </div></div>`);
+  const d = node.querySelector('.desc');
+  if (d) d.addEventListener('click', () => d.classList.toggle('clamp'));
+  return node;
+}
+
+function renderMessage(title, hint) {
+  document.getElementById('content').replaceChildren(el(
+    `<div class="error"><b>${esc(title)}</b><br><br>${esc(hint || '')}</div>`));
+}
+
+function status(text) { document.getElementById('status').textContent = text; }
+
+document.getElementById('login').addEventListener('click', login);
+document.getElementById('refresh').addEventListener('click', loadLibrary);
+if (clientId()) login(); else showSetup();
+</script>
+</body>
+</html>
