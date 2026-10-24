@@ -35,108 +35,64 @@
   .desc { color: var(--secondary); font-size: 14px; margin-top: 6px; }
   .desc.clamp { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
   .setup, .error { background: var(--card); border-radius: 12px; padding: 18px; margin: 20px 0; color: var(--secondary); font-size: 14px; }
-  .setup input { width: 100%; background: var(--bg); border: 1px solid var(--fill); border-radius: 10px; color: var(--text); padding: 10px 12px; font-size: 14px; margin: 10px 0; }
-  .setup code, .error code { background: var(--fill); border-radius: 6px; padding: 1px 6px; font-size: 13px; word-break: break-all; }
+  .setup b { color: var(--text); }
   .setup ol { margin: 10px 0 0 18px; }
   .setup li { margin: 6px 0; }
   footer { color: var(--tertiary); font-size: 12px; margin-top: 30px; text-align: center; }
 </style>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <header>
   <h1>MovieNote</h1>
   <span class="spacer"></span>
   <button id="refresh" class="primary" hidden>Обновить</button>
-  <button id="login">Войти через Google</button>
-  <div id="status">Чтение библиотеки из Google Drive — только в вашем браузере.</div>
+  <div id="status"></div>
 </header>
 <main id="content"></main>
-<footer>MovieNote Web · файл movienote-library.json из вашего Google Drive · страница работает локально в браузере</footer>
+<footer>MovieNote Web · список открывается по ссылке из приложения · без входа</footer>
 
 <script>
-const FILE_NAME = 'movienote-library.json';
-const SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+// Browser API key of the movienote Google Cloud project (restricted to this
+// site's origin). Used only to read the publicly shared library file.
+const API_KEY = '';
 const params = new URLSearchParams(location.search);
-let accessToken = null;
-let fileId = null;
-
-function clientId() {
-  const fromQuery = params.get('client');
-  if (fromQuery) { localStorage.setItem('mn_client_id', fromQuery); }
-  return localStorage.getItem('mn_client_id');
-}
+const FILE_ID = params.get('file');
 
 function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-function showSetup() {
+function showWelcome() {
   document.getElementById('content').replaceChildren(el(`
     <div class="setup">
-      <b>Настройка (один раз)</b>
+      <b>Просмотр списка фильмов и сериалов</b>
       <ol>
-        <li>Откройте <a style="color:var(--accent)" href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console → Credentials</a> (проект movienote).</li>
-        <li>Создайте <b>OAuth client ID → Web application</b>.</li>
-        <li>Authorized JavaScript origins: <code>${location.origin}</code></li>
-        <li>Скопируйте Client ID (…apps.googleusercontent.com) и вставьте ниже — он сохранится в этом браузере:</li>
+        <li>Откройте приложение MovieNote на телефоне.</li>
+        <li>Нажмите «Синхр.» — после синхронизации приложение покажет <b>ссылку</b> на эту страницу.</li>
+        <li>Скопируйте ссылку и откройте её здесь — или добавьте в закладки.</li>
       </ol>
-      <input id="cid" placeholder="xxxx.apps.googleusercontent.com">
-      <button class="primary" onclick="saveCid()">Сохранить и войти</button>
+      Ссылка открывается на любом устройстве, вход не нужен.
     </div>`));
-  document.getElementById('login').hidden = true;
-}
-
-window.saveCid = function () {
-  const v = document.getElementById('cid').value.trim();
-  if (!v.includes('apps.googleusercontent.com')) { alert('Похоже, это не Client ID'); return; }
-  localStorage.setItem('mn_client_id', v);
-  login();
-};
-
-function login() {
-  if (!clientId()) { showSetup(); return; }
-  if (!window.google?.accounts?.oauth2) { setTimeout(login, 200); return; }
-  const tc = google.accounts.oauth2.initTokenClient({
-    client_id: clientId(),
-    scope: SCOPE,
-    callback: (resp) => {
-      if (resp.error) { status('Вход не выполнен: ' + resp.error); return; }
-      accessToken = resp.access_token;
-      document.getElementById('login').hidden = true;
-      document.getElementById('refresh').hidden = false;
-      loadLibrary();
-    }
-  });
-  tc.requestAccessToken({ prompt: '' });
-}
-
-async function api(url, options) {
-  const resp = await fetch(url, { ...options, headers: { Authorization: 'Bearer ' + accessToken, ...(options?.headers || {}) } });
-  if (resp.status === 401) { accessToken = null; throw new Error('Требуется повторный вход'); }
-  if (!resp.ok) throw new Error('Drive API ' + resp.status);
-  return resp;
+  status('Откройте ссылку из приложения, чтобы посмотреть список.');
 }
 
 async function loadLibrary() {
+  if (!API_KEY) {
+    renderMessage('Страница почти готова', 'Завершается настройка просмотра — попробуйте открыть ссылку чуть позже.');
+    return;
+  }
   try {
-    status('Ищу файл библиотеки…');
-    const list = await (await api(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent("name = '" + FILE_NAME + "' and trashed = false")}&fields=${encodeURIComponent('files(id,modifiedTime)')}&spaces=drive&pageSize=5`)).json();
-    const files = (list.files || []).sort((a, b) => (b.modifiedTime || '').localeCompare(a.modifiedTime || ''));
-    if (!files.length) {
-      renderMessage('Файл ' + FILE_NAME + ' не найден на Google Drive.',
-        'Откройте приложение на телефоне и нажмите «Синхр.» — файл будет создан при первом сохранении.');
+    status('Загружаю…');
+    const resp = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(FILE_ID)}?alt=media&key=${API_KEY}`);
+    if (resp.status === 403 || resp.status === 404) {
+      renderMessage('Нет доступа к файлу', 'Попросите владельца списка открыть приложение и нажать «Синхр.» — доступ обновится автоматически.');
       return;
     }
-    fileId = files[0].id;
-    status('Загружаю…');
-    const text = await (await api(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`)).text();
-    const movies = JSON.parse(text);
+    if (!resp.ok) throw new Error('Drive API ' + resp.status);
+    const movies = JSON.parse(await resp.text());
     render(movies);
-    status('Синхронизировано · ' + new Date(files[0].modifiedTime).toLocaleString('ru-RU'));
+    status('Обновлено · ' + new Date().toLocaleString('ru-RU'));
   } catch (e) {
-    if (accessToken === null) { login(); return; }
-    renderMessage('Не удалось загрузить библиотеку', e.message + '. Проверьте, что вы — тест-пользователь OAuth-клиента (консоль Google Cloud → OAuth consent screen → Test users) и вошли тем же аккаунтом, где лежит файл.');
-    status('');
+    renderMessage('Не удалось загрузить список', e.message);
   }
 }
 
@@ -188,9 +144,13 @@ function renderMessage(title, hint) {
 
 function status(text) { document.getElementById('status').textContent = text; }
 
-document.getElementById('login').addEventListener('click', login);
 document.getElementById('refresh').addEventListener('click', loadLibrary);
-if (clientId()) login(); else showSetup();
+if (FILE_ID) {
+  document.getElementById('refresh').hidden = false;
+  loadLibrary();
+} else {
+  showWelcome();
+}
 </script>
 </body>
 </html>
